@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  discord-dm-bot:
+    build: .
+    container_name: discord-dm-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persistent data storage
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Config files (optional)
+      - ./config:/app/config:ro
+    environment:
+      - NODE_ENV=production
+      - DATABASE_PATH=/app/data/dmbot.db
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD", "node", "src/healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Optional: Backup service
+  backup:
+    image: alpine:latest
+    container_name: discord-dm-bot-backup
+    volumes:
+      - ./data:/data:ro
+      - ./backups:/backups
+    command: >
+      sh -c "while true; do
+        echo 'Creating backup...';
+        tar -czf /backups/backup-$$(date +%Y%m%d-%H%M%S).tar.gz -C /data .;
+        echo 'Backup completed';
+        find /backups -name 'backup-*.tar.gz' -mtime +7 -delete;
+        sleep 86400;
+      done"
+    restart: unless-stopped
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge
+
+volumes:
+  bot-data:
+  bot-logs:
